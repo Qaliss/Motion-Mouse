@@ -26,7 +26,7 @@ unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 50;
 
 unsigned long lastSend = 0;
-const int sendInterval = 50;
+const int sendInterval = 25;
 
 
 const String deviceID = "ESP32_01";

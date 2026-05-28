@@ -67,7 +67,8 @@ async def ingest(data: IMUData):
         data.sensor.gyro_x,
         data.sensor.gyro_y,
         data.sensor.gyro_z,
-        data.sensor.temp
+        data.sensor.temp,
+        abs(data.sensor.accel_x) + abs(data.sensor.accel_y) + abs(data.sensor.accel_z)  + abs(data.sensor.gyro_x) + abs(data.sensor.gyro_y) + abs(data.sensor.gyro_z)
     ]
 
     with lock:
@@ -95,7 +96,8 @@ def stop_session():
         "gyro_x",
         "gyro_y",
         "gyro_z",
-        "temp"
+        "temp",
+        "motion_magnitude"
     ]
 
     with open(filename, "w", newline="") as f:
