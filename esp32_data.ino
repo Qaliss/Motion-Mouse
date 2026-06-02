@@ -26,7 +26,7 @@ unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 50;
 
 unsigned long lastSend = 0;
-const int sendInterval = 25;
+const int sendInterval = 50;
 
 
 const String deviceID = "ESP32_01";
@@ -163,9 +163,9 @@ void toggleRecording() {
 }
 
 void sendIMUData() {
-  sensors_event_t accel, gyro, temp;
+  sensors_event_t accel, gyro;
   
-  mpu.getEvent(&accel, &gyro, &temp);
+  mpu.getEvent(&accel, &gyro);
 
   StaticJsonDocument<512> doc;
 
@@ -182,7 +182,6 @@ void sendIMUData() {
   sensor["gyro_y"] = gyro.gyro.y;
   sensor["gyro_z"] = gyro.gyro.z;
 
-  sensor["temp"] = temp.temperature;
 
   String jsonString;
   serializeJson(doc, jsonString);

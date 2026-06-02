@@ -18,6 +18,7 @@ buffer = []
 lock = threading.Lock()
 
 x_window = deque(maxlen = 6)
+z_window = deque(maxlen = 6)
 
 last_gesture_time = 0
 COOLDOWN = 0.1
@@ -59,25 +60,39 @@ def start_session(label: str):
 
 def classify_flick():
 
-    global x_window
+    global x_window, z_window
 
-    values = list(x_window)
+    x_values = list(x_window)
+    z_values = list(z_window)
 
-    if len(values) < 6:
+    if len(x_values) < 6 or len(z_values) < 6:
         return None
     
-    max_val = max(values)
-    min_val = min(values)
+    max_x_val = max(x_values)
+    min_x_val = min(x_values)
 
-    max_index = values.index(max_val)
-    min_index = values.index(min_val)
+    max_x_index = x_values.index(max_x_val)
+    min_x_index = x_values.index(min_x_val)
 
-    if max_val > 4 and min_val < -4:
-        if min_index < max_index:
+    if max_x_val > 4 and min_x_val < -4:
+        if min_x_index < max_x_index:
             return "LEFT"
         
-        if max_index < min_index:
+        if max_x_index < min_x_index:
             return "RIGHT"
+        
+    max_z_val = max(z_values)
+    min_z_val = min(z_values)
+
+    max_z_index = z_values.index(max_z_val)
+    min_z_index = z_values.index(min_z_val)
+
+    if max_z_val > 4 and min_z_val < -4:
+        if min_z_index < max_z_index:
+            return "UP"
+        
+        if max_z_index < min_z_index:
+            return "DOWN"
         
     return None
 
@@ -111,6 +126,7 @@ async def ingest(data: IMUData):
     az = data.sensor.accel_z
 
     x_window.append(ax)
+    z_window.append(az)
 
     accel_mag = (ax**2 + ay**2 + az**2)**0.5
 
