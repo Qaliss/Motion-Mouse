@@ -4,12 +4,13 @@
 #include <Wire.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
+#include <WebSocketsClient.h>
 
 const char* ssid = "OpenWrt";
 
 String currentLabel = "";
-
-const String serverURL = "http://192.168.1.244:8000/";
+WebSocketsClient webSocket;
+bool pendingSessionStart = false;
 
 
 Adafruit_MPU6050 mpu;
@@ -88,19 +89,17 @@ void setup() {
   Serial.print("Label set to: ");
   Serial.println(currentLabel);
 
-  HTTPClient http;
-  String startUrl = serverURL + "start?label=" + currentLabel;
-  Serial.print("hitting URL: ");
-  Serial.println(startUrl);
-  http.begin(startUrl);
-  http.POST("");
-  http.end();
-  Serial.println("Session started on server");
+  pendingSessionStart = true;
+
+  webSocket.begin("192.168.1.244", 8000, "/ws");
+  webSocket.onEvent(webSocketEvent);
+  webSocket.setReconnectInterval(5000);
+
 }
 
 
 void loop() {
-
+  webSocket.loop();
   checkButton();
 
     // Only send data if recording
@@ -142,6 +141,32 @@ void checkButton() {
   lastButtonState = reading;
 }
 
+void webSocketEvent(
+  WStype_t type,
+  uint8_t * payload,
+  size_t length
+) {
+  switch(type) {
+    case WStype_CONNECTED:
+      Serial.println("WEBSOCKET CONNECTED");
+      if (pendingSessionStart) {
+        sendControlMessage("start");
+        Serial.println("Session started on server");
+        pendingSessionStart = false;
+      }
+      break;
+    case WStype_DISCONNECTED:
+      Serial.println("WEBSOCKET DISCONNECTED");
+      break;
+    case WStype_TEXT:
+      Serial.printf("Received %s\n", payload);
+      break;
+    case WStype_ERROR:
+      Serial.println("WEBSOCKET ERROR");
+      break;
+  }
+}
+
 void toggleRecording() {
   isRecording = !isRecording;
   
@@ -149,27 +174,24 @@ void toggleRecording() {
     Serial.println("=== RECORDING STARTED ===");
     digitalWrite(LED_PIN, HIGH);
 
-    HTTPClient http;
-    String startURL = "http://192.168.1.244:8000/start?label=" + currentLabel;
-    http.begin(startURL);
-    http.POST("");
-    http.end();
+    sendControlMessage("start");
 
   } else {
     Serial.println("=== RECORDING STOPPED ===");
     digitalWrite(LED_PIN, LOW);
-    forceSave();
+    sendControlMessage("stop");
   }
 }
 
 void sendIMUData() {
-  sensors_event_t accel, gyro;
+  sensors_event_t accel, gyro, temp;
   
-  mpu.getEvent(&accel, &gyro);
+  mpu.getEvent(&accel, &gyro, &temp);
 
-  StaticJsonDocument<512> doc;
+  StaticJsonDocument<256> doc;
 
   doc["device_id"] = deviceID;
+  doc["type"] = "imu";
   doc["timestamp"] = millis();
 
   JsonObject sensor = doc["sensor"].to<JsonObject>();
@@ -182,47 +204,32 @@ void sendIMUData() {
   sensor["gyro_y"] = gyro.gyro.y;
   sensor["gyro_z"] = gyro.gyro.z;
 
+  sensor["temp"] = temp.temperature;
+
 
   String jsonString;
   serializeJson(doc, jsonString);
+  
+  if (webSocket.isConnected()) {
+    webSocket.sendTXT(jsonString);
+  }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
+}
 
-    http.begin(serverURL + "data");
-    http.addHeader("Content-Type", "application/json");
+void sendControlMessage(const char* action) {
+  StaticJsonDocument<128> doc;
+  doc["type"] = "control";
+  doc["action"] = action;
+  doc["label"] = currentLabel;
 
-    int httpResponseCode = http.POST(jsonString);
-    Serial.print("Attempting to connect to: ");
-  Serial.println(serverURL);
+  String msg;
+  serializeJson(doc, msg);
 
-    if (httpResponseCode > 0) {
-      Serial.printf("Data sent successfully. Response %d\n", httpResponseCode);
-    } else {
-      Serial.printf("Error sending data %d\n", httpResponseCode);
-    }
-
-    http.end();
-  } else {
-    Serial.println("Wifi not connected");
+  if (webSocket.isConnected()) {
+    webSocket.sendTXT(msg);
   }
 }
 
 void forceSave() {
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    String saveURL = serverURL + "save";
-    
-    http.begin(saveURL);
-    int httpResponseCode = http.POST("");
-    
-    if (httpResponseCode > 0) {
-      Serial.println("Forced save to CSV successful");
-    } else {
-      Serial.println("Failed to force save");
-    }
-    
-    http.end();
-  }
+  sendControlMessage("save");
 }
-
