@@ -74,10 +74,17 @@ void setup() {
   Serial.println(WiFi.localIP());
   Serial.println("Ready to send IMU data");
 
+  webSocket.onEvent(webSocketEvent);
+  webSocket.setReconnectInterval(500);
+  webSocket.begin("192.168.1.244", 8000, "/ws");
+
+  pendingSessionStart = true;
+
   digitalWrite(LED_PIN, LOW);
 
   Serial.println("Enter punch label (e.g. left_jab, right_hook):");
   while (currentLabel == "") {
+    webSocket.loop();
     if (Serial.available()) {
       currentLabel = Serial.readStringUntil('\n');
       currentLabel.trim();
@@ -89,11 +96,11 @@ void setup() {
   Serial.print("Label set to: ");
   Serial.println(currentLabel);
 
-  pendingSessionStart = true;
-
-  webSocket.begin("192.168.1.244", 8000, "/ws");
-  webSocket.onEvent(webSocketEvent);
-  webSocket.setReconnectInterval(5000);
+  if (webSocket.isConnected()) {
+    sendControlMessage("start");
+    Serial.println("Session started on server");
+    pendingSessionStart = false;
+  }
 
 }
 
@@ -149,7 +156,7 @@ void webSocketEvent(
   switch(type) {
     case WStype_CONNECTED:
       Serial.println("WEBSOCKET CONNECTED");
-      if (pendingSessionStart) {
+      if (pendingSessionStart && currentLabel != "") {
         sendControlMessage("start");
         Serial.println("Session started on server");
         pendingSessionStart = false;
